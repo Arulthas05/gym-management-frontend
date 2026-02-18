@@ -26,6 +26,9 @@ import {
 } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import sessionService from '../../services/sessionService';
+import membershipService from '../../services/membershipService';
+import attendanceService from '../../services/attendanceService';
+import api from '../../services/api';
 import useAuthStore from '../../store/authStore';
 import { formatDate, formatTime, calculateBMI, getBMICategory } from '../../utils/helpers';
 import { toast } from 'react-toastify';
@@ -64,14 +67,18 @@ const StatCard = ({ title, value, subtitle, icon, color, action }) => (
 const MemberDashboard = () => {
   const { user } = useAuthStore();
   const [sessions, setSessions] = useState([]);
+  const [profile, setProfile] = useState(null);
   const [memberData, setMemberData] = useState({
-    membershipStatus: 'Active',
-    membershipExpiry: '2024-12-31',
+    membershipStatus: 'Loading...',
+    membershipExpiry: null,
+    membershipPlan: 'Loading...',
+    daysRemaining: 0,
     upcomingSessions: 0,
     completedSessions: 0,
     bmi: null,
-    height: 175,
-    weight: 70,
+    height: null,
+    weight: null,
+    attendanceThisMonth: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -82,22 +89,112 @@ const MemberDashboard = () => {
   const fetchMemberData = async () => {
     try {
       setLoading(true);
-      const response = await sessionService.getAll({ memberId: user.id, limit: 5 });
-      setSessions(response.sessions || []);
+      const memberId = user.memberId || user.id;
+
+      // Fetch user profile
+      const profileResponse = await api.get('/users/profile');
+      const profileData = profileResponse.data.data || profileResponse.data;
+      setProfile(profileData);
+
+      // Fetch sessions
+      const sessionsResponse = await sessionService.getAll({ memberId, limit: 5 });
+      setSessions(sessionsResponse.sessions || []);
+
+      // Fetch active membership
+      const membershipResponse = await membershipService.getAll({ memberId, status: 'active' });
+      console.log('Membership Response:', membershipResponse);
       
-      // Calculate BMI if height and weight available
-      if (memberData.height && memberData.weight) {
-        const bmi = calculateBMI(memberData.height, memberData.weight);
-        setMemberData(prev => ({ ...prev, bmi }));
+      // Handle different response structures
+      let memberships = [];
+      if (Array.isArray(membershipResponse)) {
+        memberships = membershipResponse;
+      } else if (membershipResponse.data && Array.isArray(membershipResponse.data)) {
+        memberships = membershipResponse.data;
+      } else if (membershipResponse.memberships && Array.isArray(membershipResponse.memberships)) {
+        memberships = membershipResponse.memberships;
       }
+      
+      console.log('Parsed Memberships:', memberships);
+      
+      // Get the membership with the latest expiry date
+      let activeMembership = null;
+      if (memberships.length > 0) {
+        activeMembership = memberships.reduce((latest, current) => {
+          const latestDate = new Date(latest.endDate || latest.end_date);
+          const currentDate = new Date(current.endDate || current.end_date);
+          return currentDate > latestDate ? current : latest;
+        });
+      }
+
+      console.log('Active Membership:', activeMembership);
+
+      // Calculate membership status based on expiry
+      let membershipStatusText = 'Inactive';
+      let daysRemaining = 0;
+      if (activeMembership) {
+        const expiryDate = new Date(activeMembership.endDate || activeMembership.end_date);
+        const today = new Date();
+        daysRemaining = Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24));
+        
+        console.log('Expiry Date:', expiryDate);
+        console.log('Days Remaining:', daysRemaining);
+        
+        if (daysRemaining < 0) {
+          membershipStatusText = 'Expired';
+          daysRemaining = 0;
+        } else if (daysRemaining <= 7) {
+          membershipStatusText = 'Expiring Soon';
+        } else if (daysRemaining <= 30) {
+          membershipStatusText = 'Active';
+        } else {
+          membershipStatusText = 'Active';
+        }
+      }
+
+      // Fetch attendance for this month
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      const attendanceResponse = await attendanceService.getAll({
+        memberId,
+        startDate: startOfMonth.toISOString().split('T')[0],
+        endDate: new Date().toISOString().split('T')[0],
+      });
+
+      // Calculate BMI if height and weight available
+      let bmi = null;
+      if (profileData.details?.height && profileData.details?.weight) {
+        bmi = Number(calculateBMI(profileData.details.height, profileData.details.weight));
+      }
+
+      // Count completed sessions this month
+      const completedSessionsCount = (sessionsResponse.sessions || []).filter(
+        s => s.status === 'completed' && 
+        new Date(s.sessionDate) >= startOfMonth
+      ).length;
+
+      setMemberData({
+        membershipStatus: membershipStatusText,
+        membershipExpiry: activeMembership?.endDate || activeMembership?.end_date || null,
+        membershipPlan: activeMembership?.planName || activeMembership?.plan_name || 'No Plan',
+        daysRemaining,
+        upcomingSessions: (sessionsResponse.sessions || []).filter(s => s.status === 'scheduled').length,
+        completedSessions: completedSessionsCount,
+        bmi,
+        height: profileData.details?.height || null,
+        weight: profileData.details?.weight || null,
+        attendanceThisMonth: attendanceResponse.attendance?.length || 0,
+      });
     } catch (error) {
-      toast.error('Failed to load member data');
+      console.error('Failed to load member data:', error);
+      toast.error('Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
-  const progressData = [
+  const progressData = memberData.weight ? [
+    { week: 'Current', weight: memberData.weight },
+  ] : [
     { week: 'Week 1', weight: 72 },
     { week: 'Week 2', weight: 71.5 },
     { week: 'Week 3', weight: 71 },
@@ -112,7 +209,7 @@ const MemberDashboard = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-        Welcome back, {user?.firstName}!
+        Welcome back, {profile?.details?.firstName || user?.email?.split('@')[0]}!
       </Typography>
 
       {/* Stats Cards */}
@@ -121,12 +218,20 @@ const MemberDashboard = () => {
           <StatCard
             title="Membership Status"
             value={memberData.membershipStatus}
-            subtitle={`Expires: ${formatDate(memberData.membershipExpiry)}`}
+            subtitle={
+              memberData.membershipExpiry 
+                ? `${memberData.membershipPlan} - ${memberData.daysRemaining} days left`
+                : memberData.membershipPlan
+            }
             icon={<MembershipIcon />}
-            color="#667eea"
+            color={
+              memberData.membershipStatus === 'Active' ? '#667eea' :
+              memberData.membershipStatus === 'Expiring Soon' ? '#f093fb' :
+              memberData.membershipStatus === 'Expired' ? '#ff6b6b' : '#95a5a6'
+            }
             action={
               <Button size="small" fullWidth variant="outlined">
-                Renew Membership
+                {memberData.membershipStatus === 'Inactive' ? 'Purchase Membership' : 'Renew Membership'}
               </Button>
             }
           />
@@ -148,8 +253,8 @@ const MemberDashboard = () => {
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="BMI"
-            value={memberData.bmi || 'N/A'}
-            subtitle={memberData.bmi ? getBMICategory(memberData.bmi) : 'Update your stats'}
+            value={memberData.bmi ? Number(memberData.bmi).toFixed(1) : 'N/A'}
+            subtitle={memberData.bmi ? getBMICategory(Number(memberData.bmi)) : 'Update your stats'}
             icon={<FitnessIcon />}
             color="#f093fb"
           />
@@ -186,8 +291,8 @@ const MemberDashboard = () => {
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText
-                    primary={`Session with ${session.trainer?.firstName} ${session.trainer?.lastName}`}
-                    secondary={`${formatDate(session.sessionDate)} at ${formatTime(session.startTime)}`}
+                    primary={`Session with ${session.trainerFirstName || session.trainer_first_name || 'Trainer'} ${session.trainerLastName || session.trainer_last_name || ''}`}
+                    secondary={`${formatDate(session.sessionDate || session.session_date)} at ${formatTime(session.startTime || session.start_time)}`}
                   />
                   <Chip
                     label={session.status}
