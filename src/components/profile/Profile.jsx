@@ -46,7 +46,34 @@ const Profile = () => {
     try {
       setLoading(true);
       const response = await api.get(`/users/profile`);
-      setProfileData(response.data.data);
+      const data = response.data.data;
+      
+      // Normalize the data structure - combine user data with details
+      const normalizedData = {
+        ...data,
+        firstName: data.details?.first_name || '',
+        lastName: data.details?.last_name || '',
+        phone: data.details?.phone || '',
+        address: data.details?.address || '',
+        dateOfBirth: data.details?.date_of_birth || '',
+        gender: data.details?.gender || '',
+        emergencyContact: data.details?.emergency_contact || '',
+        emergencyPhone: data.details?.emergency_phone || '',
+        profileImage: data.details?.profile_image || '',
+        // Member specific
+        height: data.details?.height || '',
+        weight: data.details?.weight || '',
+        // Trainer specific
+        specialization: data.details?.specialization || '',
+        experience: data.details?.experience || '',
+        hourlyRate: data.details?.hourly_rate || '',
+        certifications: data.details?.certifications || '',
+        bio: data.details?.bio || '',
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+      };
+      
+      setProfileData(normalizedData);
     } catch (error) {
       toast.error('Failed to load profile data');
     } finally {

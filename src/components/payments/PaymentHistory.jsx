@@ -63,7 +63,7 @@ const PaymentHistory = () => {
       };
 
       if (user.role === 'member') {
-        params.memberId = user.id;
+        params.memberId = user.memberId || user.id;
       }
 
       const response = await paymentService.getAll(params);

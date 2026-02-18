@@ -52,7 +52,7 @@ const SessionForm = ({ open, onClose }) => {
   const fetchMembers = async () => {
     try {
       const response = await memberService.getAll();
-      setMembers(response.data || []);
+      setMembers(response.members || []);
     } catch (error) {
       toast.error('Failed to load members');
     }
@@ -104,7 +104,7 @@ const SessionForm = ({ open, onClose }) => {
                   <MenuItem value="">Select Member</MenuItem>
                   {members.map((member) => (
                     <MenuItem key={member.id} value={member.id}>
-                      {member.firstName} {member.lastName}
+                      {member.first_name} {member.last_name}
                     </MenuItem>
                   ))}
                 </TextField>

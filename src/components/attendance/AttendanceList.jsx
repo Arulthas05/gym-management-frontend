@@ -62,7 +62,7 @@ const AttendanceList = () => {
       };
 
       if (user.role === 'member') {
-        params.memberId = user.id;
+        params.memberId = user.memberId || user.id;
       }
 
       const response = await attendanceService.getAll(params);
@@ -77,7 +77,7 @@ const AttendanceList = () => {
 
   const handleCheckIn = async () => {
     try {
-      await attendanceService.checkIn(user.id);
+      await attendanceService.checkIn(user.memberId || user.id);
       toast.success('Checked in successfully!');
       fetchAttendance();
     } catch (error) {
@@ -87,7 +87,7 @@ const AttendanceList = () => {
 
   const handleCheckOut = async () => {
     try {
-      await attendanceService.checkOut(user.id);
+      await attendanceService.checkOut(user.memberId || user.id);
       toast.success('Checked out successfully!');
       fetchAttendance();
     } catch (error) {
@@ -108,7 +108,7 @@ const AttendanceList = () => {
 
   // Generate QR code data for member
   const qrData = JSON.stringify({
-    memberId: user.id,
+    memberId: user.memberId || user.id,
     timestamp: Date.now(),
   });
 

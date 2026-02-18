@@ -246,14 +246,13 @@ const PaymentForm = ({ open, onClose }) => {
     }
   };
 
-  const getMemberIdForUser = async () => {
-    try {
-      const response = await memberService.getById({ params: { userId: user.id } });
-      if (response.members && response.members.length > 0) {
-        setFormData(prev => ({ ...prev, memberId: response.members[0].id }));
-      }
-    } catch (error) {
-      console.error('Failed to get member ID:', error);
+  const getMemberIdForUser = () => {
+    // Use memberId from user object (available after login)
+    if (user.memberId) {
+      setFormData(prev => ({ ...prev, memberId: user.memberId }));
+    } else if (user.id) {
+      // Fallback: use user.id if memberId not available (needs re-login)
+      setFormData(prev => ({ ...prev, memberId: user.id }));
     }
   };
 

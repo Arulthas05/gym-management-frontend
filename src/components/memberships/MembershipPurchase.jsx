@@ -38,6 +38,7 @@ const CheckoutForm = ({ plan, onSuccess, onCancel }) => {
     try {
       // Create payment intent
       const { clientSecret } = await paymentService.createIntent({
+        memberId: user.memberId || user.id, // Use memberId if available, fallback to user.id
         amount: plan.price,
         paymentType: 'membership',
         description: `${plan.name} Membership`,

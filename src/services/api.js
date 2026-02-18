@@ -8,6 +8,17 @@ const api = axios.create({
   },
 });
 
+// Ensure FormData requests use multipart/form-data (remove preset JSON header so axios can set boundary)
+api.interceptors.request.use((config) => {
+  if (config.data instanceof FormData) {
+    // remove Content-Type so axios sets correct multipart boundary
+    if (config.headers && config.headers['Content-Type']) {
+      delete config.headers['Content-Type'];
+    }
+  }
+  return config;
+});
+
 // Request interceptor - Add token to requests
 api.interceptors.request.use(
   (config) => {

@@ -16,6 +16,7 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import paymentService from '../../services/paymentService';
+import useAuthStore from '../../store/authStore';
 import { formatCurrency } from '../../utils/helpers';
 
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY || 'pk_test_dummy');
@@ -23,6 +24,7 @@ const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY || 'pk_
 const CheckoutForm = ({ supplement, quantity, onSuccess, onCancel }) => {
   const stripe = useStripe();
   const elements = useElements();
+  const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -38,6 +40,7 @@ const CheckoutForm = ({ supplement, quantity, onSuccess, onCancel }) => {
 
     try {
       const { clientSecret } = await paymentService.createIntent({
+        memberId: user.memberId || user.id, // Use memberId if available, fallback to user.id
         amount: total,
         paymentType: 'supplement',
         description: `${supplement.name} x${quantity}`,
